@@ -3,7 +3,7 @@
  * Plugin Name:       Iberodominios
  * Plugin URI:        https://ibero.capital
  * Description:       Permite conectarse a la API de Openprovider, listar y comprar dominios usando AJAX. Integra TLDs locales, sincronización y configuraciones avanzadas.
- * Version:           2.0.0
+ * Version:           1.2.0
  * Author:            Iberocapital
  * Author URI:        https://ibero.capital
  * License:           GPL-2.0-or-later
