@@ -48,50 +48,44 @@ jQuery(document).ready(function($) {
 
                 var data = response.data;
                 currentMode = data.mode;
-
                 var html = '';
 
                 if (data.mode === 'list') {
-                    // Si offset = 0, creamos la tabla, si no, añadimos filas
                     if (offset === 0) {
-                        if (data.results && data.results.length > 0) {
-                            html += '<table class="iberodominios-table" style="width:100%;border-collapse:collapse;">';
-                            html += '<tr><th>Domain</th><th>Status</th><th>Price</th></tr>';
-                            html += '</table>';
-                            $('.iberodominios-results').html(html);
-                        } else {
-                            $('.iberodominios-results').html('<p>No results found.</p>');
-                            return;
-                        }
+                        // Crear tabla (aunque no haya resultados, por consistencia)
+                        html += '<table class="iberodominios-table" style="width:100%;border-collapse:collapse;">';
+                        html += '<tr><th>Domain</th><th>Status</th><th>Price</th></tr>';
+                        html += '</table>';
+                        $('.iberodominios-results').html(html);
                     }
 
-                    // Añadir filas
                     var $table = $('.iberodominios-table');
-                    data.results.forEach(function(d) {
-                        $table.append(createDomainRow(d.domain));
-                        domainsToCheck.push(d.domain);
-                    });
+                    if (data.results && data.results.length > 0) {
+                        data.results.forEach(function(d) {
+                            $table.append(createDomainRow(d.domain));
+                            domainsToCheck.push(d.domain);
+                        });
+                    }
 
                     if (data.has_more) {
                         $('.iberodominios-results').append('<button class="iberodominios-load-more">Cargar más</button>');
                         $('.iberodominios-load-more').off('click').on('click', function() {
                             $(this).remove();
-                            offset += limit;
                             $('.iberodominios-results').append(
                                 '<div class="iberodominios-loading-indicator">' +
                                 '<img src="' + IberodominiosAjax.plugin_url + 'assets/svg/infinity.svg" alt="Cargando..."> ' +
                                 'Cargando más resultados...</div>'
                             );
+                            offset += limit;
                             loadDomains(currentDomain, offset, limit);
                         });
                     }
 
-                    // Ahora cargamos estado/precio uno a uno
                     loadAllIndividual();
 
                 } else if (data.mode === 'exact') {
                     if (offset === 0) {
-                        // Resultado exacto
+                        // Mostrar resultado exacto
                         if (data.status === 'available') {
                             html += '<div style="padding:10px;background:#e0f7e0;border:1px solid #0c0;margin-bottom:10px;">';
                             html += 'Your domain is available!<br><strong>' + data.domain + '</strong><br>Price: ' + data.price + ' ' + data.currency;
@@ -109,26 +103,27 @@ jQuery(document).ready(function($) {
                     }
 
                     var $table = $('.iberodominios-table');
-                    data.results.forEach(function(s) {
-                        $table.append(createDomainRow(s.domain));
-                        domainsToCheck.push(s.domain);
-                    });
+                    if (data.results && data.results.length > 0) {
+                        data.results.forEach(function(s) {
+                            $table.append(createDomainRow(s.domain));
+                            domainsToCheck.push(s.domain);
+                        });
+                    }
 
                     if (data.has_more) {
                         $('.iberodominios-results').append('<button class="iberodominios-load-more">Cargar más</button>');
                         $('.iberodominios-load-more').off('click').on('click', function() {
                             $(this).remove();
-                            offset += limit;
                             $('.iberodominios-results').append(
                                 '<div class="iberodominios-loading-indicator">' +
                                 '<img src="' + IberodominiosAjax.plugin_url + 'assets/svg/infinity.svg" alt="Cargando..."> ' +
                                 'Cargando más sugerencias...</div>'
                             );
+                            offset += limit;
                             loadDomains(currentDomain, offset, limit);
                         });
                     }
 
-                    // Cargar estado/precio uno a uno
                     loadAllIndividual();
                 }
 
@@ -140,19 +135,21 @@ jQuery(document).ready(function($) {
     }
 
     function createDomainRow(domain) {
-        // Fila inicial con indicadores por separado
-        var svg = '<img src="' + IberodominiosAjax.plugin_url + 'assets/svg/infinity.svg" alt="Cargando..." style="width:16px;height:16px;vertical-align:middle;">';
+        // Ahora solo se muestra el dominio con blur y un icono de carga sobre él.
+        var svg = '<img src="' + IberodominiosAjax.plugin_url + 'assets/svg/infinity.svg" alt="Cargando..." style="width:16px;height:16px;vertical-align:middle;margin-right:5px;">';
+        // Agregamos una clase loading a la fila o a la celda del dominio
+        // Le ponemos blur a la celda del dominio hasta que cargue
         var row = '<tr data-domain="' + domain + '">' +
-                  '<td>' + domain + '</td>' +
-                  '<td class="loading-cell">' + svg + ' Cargando estado</td>' +
-                  '<td class="loading-cell">' + svg + ' Cargando precio</td>' +
+                  '<td class="domain-loading" style="position:relative;filter:blur(1px);">' + domain + 
+                  '<span class="loading-icon" style="position:absolute;left:5px;top:5px;">' + svg + '</span>' +
+                  '</td>' +
+                  '<td>-</td>' +
+                  '<td>-</td>' +
                   '</tr>';
         return row;
     }
 
     function loadAllIndividual() {
-        // Ahora hacemos llamadas AJAX individuales para cada dominio
-        // domainsToCheck ya contiene todos los dominios
         if (domainsToCheck.length === 0) return;
         loadNextIndividual(0);
     }
@@ -173,30 +170,34 @@ jQuery(document).ready(function($) {
                 domain: dom
             },
             success: function(response) {
+                var $row = $('.iberodominios-table tr[data-domain="' + dom + '"]');
                 if (response.success && response.data) {
                     var item = response.data;
-                    var $row = $('.iberodominios-table tr[data-domain="' + item.domain + '"]');
                     if ($row.length > 0) {
-                        $row.find('td:nth-child(2)').removeClass('loading-cell').text(item.status);
+                        // Quitar blur y el icono de carga del dominio
+                        $row.find('td.domain-loading').css('filter','none').find('.loading-icon').remove();
+                        // Actualizar estado y precio
+                        $row.find('td:nth-child(2)').text(item.status);
                         var price = (item.status === 'free' && item.price) ? (item.price + ' ' + item.currency) : '-';
-                        $row.find('td:nth-child(3)').removeClass('loading-cell').text(price);
+                        $row.find('td:nth-child(3)').text(price);
                     }
                 } else {
-                    // Si falla, marcamos como unavailable
-                    var $row = $('.iberodominios-table tr[data-domain="' + dom + '"]');
+                    // Error o sin data, marcar como unavailable
                     if ($row.length > 0) {
-                        $row.find('td:nth-child(2)').removeClass('loading-cell').text('unavailable');
-                        $row.find('td:nth-child(3)').removeClass('loading-cell').text('-');
+                        $row.find('td.domain-loading').css('filter','none').find('.loading-icon').remove();
+                        $row.find('td:nth-child(2)').text('unavailable');
+                        $row.find('td:nth-child(3)').text('-');
                     }
                 }
                 loadNextIndividual(index + 1);
             },
             error: function() {
-                // En caso de error, marcamos unavailable
+                var dom = domainsToCheck[index];
                 var $row = $('.iberodominios-table tr[data-domain="' + dom + '"]');
                 if ($row.length > 0) {
-                    $row.find('td:nth-child(2)').removeClass('loading-cell').text('unavailable');
-                    $row.find('td:nth-child(3)').removeClass('loading-cell').text('-');
+                    $row.find('td.domain-loading').css('filter','none').find('.loading-icon').remove();
+                    $row.find('td:nth-child(2)').text('unavailable');
+                    $row.find('td:nth-child(3)').text('-');
                 }
                 loadNextIndividual(index + 1);
             }
