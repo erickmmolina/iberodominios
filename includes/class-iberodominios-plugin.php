@@ -1,48 +1,47 @@
 <?php
-/**
- * Clase principal del plugin Iberodominios
- * 
- * Esta clase inicializa el plugin, carga los widgets de Elementor, 
- * la clase para la API, y la página de ajustes.
- */
-
-// Evitar acceso directo
-if (!defined('ABSPATH')) {
+if (!defined('ABSPATH'))
     exit;
-}
 
 require_once IBERODOMINIOS_PLUGIN_DIR . 'admin/class-iberodominios-settings-page.php';
 require_once IBERODOMINIOS_PLUGIN_DIR . 'includes/class-iberodominios-api.php';
-require_once IBERODOMINIOS_PLUGIN_DIR . 'includes/class-iberodominios-elementor-widget.php';
+require_once IBERODOMINIOS_PLUGIN_DIR . 'includes/class-iberodominios-db.php';
+require_once IBERODOMINIOS_PLUGIN_DIR . 'includes/class-iberodominios-ajax.php';
 
 class Iberodominios_Plugin
 {
-    /**
-     * Instancia singleton
-     */
     private static $instance = null;
 
-    /**
-     * Constructor privado para patrón singleton
-     */
     private function __construct()
     {
-        // Cargar texto de internacionalización
-        load_plugin_textdomain('iberodominios', false, dirname(plugin_basename(__FILE__)) . '/languages/');
-
-        // Inicializar ajustes del plugin
+        // Registrar ajustes
         add_action('admin_init', array($this, 'register_plugin_settings'));
-
-        // Agregar página de ajustes al menú de administración
         add_action('admin_menu', array($this, 'add_settings_page'));
 
-        // Inicializar integración con Elementor
-        add_action('elementor/widgets/register', array($this, 'register_elementor_widgets'));
+        // Scripts
+        add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_assets'));
+        add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
+
+        // Elementor
+        if (did_action('elementor/loaded')) {
+            add_action('elementor/widgets/register', array($this, 'register_elementor_widgets'));
+        } else {
+            add_action('admin_notices', function () {
+                echo '<div class="notice notice-warning"><p>' . __('Iberodominios requiere Elementor para funcionar correctamente. Por favor, activa Elementor.', 'iberodominios') . '</p></div>';
+            });
+        }
+
+        // AJAX principal
+        add_action('wp_ajax_iberodominios_check_domain', array('Iberodominios_AJAX', 'check_domain'));
+        add_action('wp_ajax_nopriv_iberodominios_check_domain', array('Iberodominios_AJAX', 'check_domain'));
+
+        // Acción AJAX para batch
+        add_action('wp_ajax_iberodominios_check_batch', array('Iberodominios_AJAX', 'check_batch'));
+        add_action('wp_ajax_nopriv_iberodominios_check_batch', array('Iberodominios_AJAX', 'check_batch'));
+
+        // Acción AJAX para búsqueda de TLDs en backend
+        add_action('wp_ajax_iberodominios_search_tlds', array($this, 'iberodominios_search_tlds_callback'));
     }
 
-    /**
-     * Método para obtener la instancia única de la clase
-     */
     public static function instance()
     {
         if (self::$instance === null) {
@@ -51,24 +50,18 @@ class Iberodominios_Plugin
         return self::$instance;
     }
 
-    /**
-     * Registrar ajustes del plugin en la base de datos, para almacenar credenciales de API
-     */
     public function register_plugin_settings()
     {
-        // Registramos opciones para guardar usuario, password y token de la API
         register_setting('iberodominios_settings_group', 'iberodominios_api_username');
         register_setting('iberodominios_settings_group', 'iberodominios_api_password');
         register_setting('iberodominios_settings_group', 'iberodominios_api_token');
         register_setting('iberodominios_settings_group', 'iberodominios_default_currency');
         register_setting('iberodominios_settings_group', 'iberodominios_show_promo');
-
-        // El token puede ser generado y guardado tras el login. Aquí sólo se define el setting.
+        register_setting('iberodominios_settings_group', 'iberodominios_popular_tlds', array('default' => []));
+        register_setting('iberodominios_settings_group', 'iberodominios_initial_results_count', array('default' => 10));
+        register_setting('iberodominios_settings_group', 'iberodominios_deep_cleanup');
     }
 
-    /**
-     * Agregar página de ajustes al menú
-     */
     public function add_settings_page()
     {
         add_menu_page(
@@ -81,22 +74,81 @@ class Iberodominios_Plugin
         );
     }
 
-    /**
-     * Renderizar la página de ajustes
-     */
     public function render_settings_page()
     {
-        // Utilizamos la clase separada para que sea más limpio
         $settings_page = new Iberodominios_Settings_Page();
         $settings_page->render_page();
     }
 
-    /**
-     * Registrar el widget de Elementor
-     */
     public function register_elementor_widgets($widgets_manager)
     {
-        // Registramos el widget definido en la clase Iberodominios_Elementor_Widget
+        require_once IBERODOMINIOS_PLUGIN_DIR . 'includes/class-iberodominios-elementor-widget.php';
         $widgets_manager->register_widget_type(new Iberodominios_Elementor_Widget());
     }
+
+    public function enqueue_frontend_assets()
+    {
+        wp_enqueue_style('iberodominios-frontend', IBERODOMINIOS_PLUGIN_URL . 'assets/css/frontend.css', array(), '1.0.0');
+        wp_enqueue_script('iberodominios-frontend', IBERODOMINIOS_PLUGIN_URL . 'assets/js/frontend.js', array('jquery'), '1.0.0', true);
+
+        wp_localize_script('iberodominios-frontend', 'IberodominiosAjax', array(
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('iberodominios_ajax_nonce'),
+            'plugin_url' => IBERODOMINIOS_PLUGIN_URL
+        ));
+    }
+
+    public function enqueue_admin_assets($hook)
+    {
+        if (strpos($hook, 'iberodominios-settings') !== false) {
+            wp_enqueue_script('jquery-ui-sortable');
+            // Encolar Select2
+            wp_enqueue_style('select2-css', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css', array(), '4.1.0');
+            wp_enqueue_script('select2-js', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js', array('jquery'), '4.1.0', true);
+
+            wp_enqueue_script('iberodominios-admin', IBERODOMINIOS_PLUGIN_URL . 'assets/js/admin.js', array('jquery', 'select2-js'), '1.0.0', true);
+            wp_localize_script('iberodominios-admin', 'IberodominiosAdmin', [
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('iberodominios_admin_ajax_nonce')
+            ]);
+        }
+    }
+
+    public static function create_tables()
+    {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'iberodominios_tlds';
+        $charset_collate = $wpdb->get_charset_collate();
+
+        $sql = "CREATE TABLE $table_name (
+            id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            tld_name VARCHAR(100) NOT NULL,
+            status VARCHAR(20) DEFAULT 'ACT',
+            PRIMARY KEY (id),
+            KEY tld_name (tld_name)
+        ) $charset_collate;";
+
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+    }
+
+    public function iberodominios_search_tlds_callback()
+    {
+        check_ajax_referer('iberodominios_admin_ajax_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('No tienes permisos para realizar esta acción.', 'iberodominios')]);
+        }
+
+        $q = isset($_POST['q']) ? sanitize_text_field($_POST['q']) : '';
+        if (strlen($q) < 2) {
+            // Devolver array vacío si la longitud es menor a 2
+            wp_send_json_success([]);
+        }
+
+        $results = Iberodominios_DB::search_tlds($q, 50);
+        // Devolvemos directamente el array
+        wp_send_json_success($results);
+    }
+
 }

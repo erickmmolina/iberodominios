@@ -11,3 +11,27 @@
     border-bottom: 1px solid #eee;
     padding: 5px;
 }
+.iberodominios-results {
+    border:1px solid #ddd;
+    padding:10px;
+}
+
+/* Clase para celdas en estado de carga */
+.loading-cell {
+    color: #ccc;
+    filter: blur(1px);
+}
+
+/* Indicador de carga arriba de la tabla */
+.iberodominios-loading-indicator {
+    margin-bottom:10px;
+    font-size:14px;
+    display:flex;
+    align-items:center;
+}
+.iberodominios-loading-indicator img {
+    margin-right:5px;
+    vertical-align:middle;
+    width:20px;
+    height:20px;
+}
