@@ -11,10 +11,7 @@
     border-bottom: 1px solid #eee;
     padding: 5px;
 }
-.iberodominios-results {
-    border:1px solid #ddd;
-    padding:10px;
-}
+
 
 /* Clase para celdas en estado de carga */
 .loading-cell {
@@ -22,7 +19,7 @@
     filter: blur(1px);
 }
 
-/* Indicador de carga arriba de la tabla */
+/* Indicador de carga */
 .iberodominios-loading-indicator {
     margin-bottom:10px;
     font-size:14px;
@@ -34,4 +31,53 @@
     vertical-align:middle;
     width:20px;
     height:20px;
+}
+
+.domain-loading {
+    position: relative;
+}
+
+
+/* Flip horizontal para el pacman (efecto espejo) */
+.loading-icon {
+    display: none;
+    position:absolute;
+    z-index:9999;
+    right: 0;
+    transform: translateY(-50%) scaleX(-1);
+    animation: pacman-move 10s linear infinite alternate;
+    animation-play-state: paused; /* PAUSADO por defecto */
+
+}
+
+.loading-svg {
+    width:16px;
+    height:16px;
+    vertical-align:middle;
+}
+/* Animación del pacman (igual que antes, pero ahora con play-state: paused por defecto) */
+@keyframes pacman-move {
+    0% {
+        transform: translateY(0%) translateX(85%);
+    }
+    100% {
+        transform: translateY(0%) translateX(0);
+    }
+}
+
+/* Clase para iniciar la animación en la fila que se esté cargando */
+.loading-running .loading-icon {
+    display: block;    /* Muestra el Pacman sólo en la fila activa */
+    animation-play-state: running;
+}
+
+/* Flip horizontal para el pacman (efecto espejo) */
+.loading-icon .loading-svg {
+    transform: scaleX(-1); /* Flip horizontal */
+}
+
+/* Mantener el blur inicial en el texto del dominio */
+.domain-wrapper {
+    display:inline-block;
+    filter: blur(1px);
 }

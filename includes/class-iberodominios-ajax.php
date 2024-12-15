@@ -20,14 +20,12 @@ class Iberodominios_AJAX
         $parts = explode('.', $domain);
         $initial_count = (int) get_option('iberodominios_initial_results_count', 100);
         $popular = Iberodominios_DB::get_popular_tlds();
-
-        // Número máximo total (teórico) para ejemplo, puedes quitarlo o ajustarlo
-        $max_count = 2000; // Ejemplo: ahora permitimos hasta 2000 si hay
+        $max_count = 2000; // Máximo total a mostrar
 
         if (count($parts) == 1) {
-            // Sin extensión
+            // MODO LIST (sin extensión)
             $name = $parts[0];
-            // Asegurar que tenemos al menos initial_count
+            // Asegurar initial_count
             if (count($popular) < $initial_count) {
                 $need = $initial_count - count($popular);
                 if ($need > 0) {
@@ -37,22 +35,28 @@ class Iberodominios_AJAX
             }
 
             $suggestions = $popular;
+            // Filtrar cualquier TLD vacía
+            $suggestions = array_filter($suggestions);
 
-            // Si no llenamos el cupo, agregamos fallback
+            // Rellenar hasta max_count
             $total_suggestions = count($suggestions);
             if ($total_suggestions < $max_count) {
                 $fneed = $max_count - $total_suggestions;
                 $fallback = Iberodominios_DB::get_tlds_batch(0, $fneed, $suggestions);
+                $fallback = array_filter($fallback); // filtrar vacíos también
                 $suggestions = array_merge($suggestions, $fallback);
             }
 
-            // Ahora aplicamos offset y limit
+            // Paginamos
             $paged_suggestions = array_slice($suggestions, $offset, $limit);
             $has_more = (count($suggestions) > $offset + $limit);
 
             $results = [];
             foreach ($paged_suggestions as $t) {
-                $results[] = ['domain' => $name . '.' . $t];
+                $t = trim($t);
+                if (!empty($t)) {
+                    $results[] = ['domain' => $name . '.' . $t];
+                }
             }
 
             wp_send_json_success([
@@ -62,7 +66,7 @@ class Iberodominios_AJAX
             ]);
 
         } else {
-            // Con extensión
+            // MODO EXACT (con extensión)
             $ext = strtolower(end($parts));
             $name = implode('.', array_slice($parts, 0, -1));
 
@@ -86,18 +90,31 @@ class Iberodominios_AJAX
             }
 
             $all_popular = array_diff($all_popular, [$ext]);
-            $all_popular = array_slice($all_popular, 0, $max_count);
-            $all_popular = array_filter($all_popular);
+            $all_popular = array_filter($all_popular); // filtrar vacíos también
 
-            // Paginamos las sugerencias también
-            $paged_suggestions = array_slice($all_popular, $offset, $limit);
-            $has_more = (count($all_popular) > $offset + $limit);
+            // Rellenar hasta max_count
+            $total_sug = count($all_popular);
+            if ($total_sug < $max_count) {
+                $fneed = $max_count - $total_sug;
+                $fallback = Iberodominios_DB::get_tlds_batch(0, $fneed, $all_popular);
+                $fallback = array_filter($fallback);
+                $final_tlds = array_values(array_unique(array_merge($all_popular, $fallback)));
+            } else {
+                $final_tlds = $all_popular;
+            }
+
+            $paged_suggestions = array_slice($final_tlds, $offset, $limit);
+            $has_more = (count($final_tlds) > $offset + $limit);
 
             $results = [];
             foreach ($paged_suggestions as $t) {
-                $results[] = ['domain' => $name . '.' . $t];
+                $t = trim($t);
+                if (!empty($t)) {
+                    $results[] = ['domain' => $name . '.' . $t];
+                }
             }
 
+            // Dependiendo del estado del dominio exacto
             if ($res && isset($res['status'])) {
                 if ($res['status'] === 'free') {
                     wp_send_json_success([
@@ -106,7 +123,7 @@ class Iberodominios_AJAX
                         'domain' => $res['domain'],
                         'price' => $res['price']['reseller']['price'] ?? null,
                         'currency' => $res['price']['reseller']['currency'] ?? 'USD',
-                        'suggestions' => $results,
+                        'results' => $results,
                         'has_more' => $has_more
                     ]);
                 } else {
@@ -114,7 +131,7 @@ class Iberodominios_AJAX
                         'mode' => 'exact',
                         'status' => 'unavailable',
                         'domain' => $domain,
-                        'suggestions' => $results,
+                        'results' => $results,
                         'has_more' => $has_more
                     ]);
                 }
@@ -123,7 +140,7 @@ class Iberodominios_AJAX
                     'mode' => 'exact',
                     'status' => 'unavailable',
                     'domain' => $domain,
-                    'suggestions' => $results,
+                    'results' => $results,
                     'has_more' => $has_more
                 ]);
             }
