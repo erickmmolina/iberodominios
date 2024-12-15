@@ -1,0 +1,13 @@
+.iberodominios-container {
+    border: 1px solid #ccc;
+    padding: 15px;
+}
+
+.iberodominios-results table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.iberodominios-results th, .iberodominios-results td {
+    border-bottom: 1px solid #eee;
+    padding: 5px;
+}
