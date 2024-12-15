@@ -40,6 +40,10 @@ class Iberodominios_Plugin
 
         // Acción AJAX para búsqueda de TLDs en backend
         add_action('wp_ajax_iberodominios_search_tlds', array($this, 'iberodominios_search_tlds_callback'));
+
+        // Acción AJAX para chequeo individual
+        add_action('wp_ajax_iberodominios_check_single', array('Iberodominios_AJAX', 'check_single'));
+        add_action('wp_ajax_nopriv_iberodominios_check_single', array('Iberodominios_AJAX', 'check_single'));
     }
 
     public static function instance()
